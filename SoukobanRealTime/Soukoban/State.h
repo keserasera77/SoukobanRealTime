@@ -28,37 +28,22 @@ private:
 
 class State {
 public:
+	unsigned mPrevTime = 0;
 	State(const char* stageData, int stageSize);
 	//~State();
-	void update();
+	void update(unsigned frameTime);
 	void drawStage() const;
 	bool clearCheck() const;
 private:
-	enum Object {
-		OBJ_SPACE,
-		OBJ_WALL,
-		OBJ_GOAL,
-		OBJ_BLOCK,
-		OBJ_MAN,
+  class Object;
+	void setSize(const char* stage, int size);
 
-		OBJ_UNKNOWN,
-	};
-	enum ImageID {
-		IMAGE_ID_PLAYER,
-		IMAGE_ID_WALL,
-		IMAGE_ID_BLOCK,
-		IMAGE_ID_GOAL,
-		IMAGE_ID_SPACE,
-	};
 	int mStageWidth;
 	int mStageHeight;
 	char* mStageData;
-	int mPx, mPy; //プレイヤーの座標
 	Image* mImg; //画像データ
-	char mPreviousKey;
-	int mCellHeight = 32, mCellWidth = 32;
+	int mPx, mPy; //プレイヤーの座標
 	Array2D<Object> mObjects;
-	Array2D<bool> mGoalFlags;
-	void drawCell(int x, int y, ImageID imageID) const;
-	void setSize(const char* stage, int size);
+	char mPrevKey;
+  double mMoveCount; //動き始めてから何画素移動したか。 0 <= mMovingPlace < 32
 };

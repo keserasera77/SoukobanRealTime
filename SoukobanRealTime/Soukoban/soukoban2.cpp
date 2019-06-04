@@ -1,7 +1,4 @@
-//製作時間::ちょうど5時間ほど
-//改良::1時間  元々のmoveの役割をmoveWithInputへ変更し、moveWithInputの部品としてmoveを追加。さらにその部品にleaveを追加
-//サンプルコードを参考に、ステージの表現方法の改変、Array2D,Stateの追加、移動時の範囲チェックの追加、readFileの追加
-//Stateのメンバ変数mPx,mPyを追加
+//Stateのメンバ変数mPx,mPyや、gCellEdgeを用いている点がサンプルコードと違う。
 
 #include "GameLib/Framework.h"
 #include <iostream>
@@ -11,18 +8,20 @@
 using namespace GameLib;
 
 void mainLoop();
-//State gStage;
 
 State* gState = 0;
+int gCount = 0; //mainLoopのループ数
 
 namespace GameLib {
 	void Framework::update() {
+	 instance().sleep(1);
    mainLoop();	
 	 }
 }
 
 void mainLoop() {
   Framework f = Framework::instance();
+	bool cleared = false;
 
 	if (f.isEndRequested()) {
 	  delete gState;
@@ -42,20 +41,33 @@ void mainLoop() {
 		return;
 	}
 
+	//フレームレート計測
+	unsigned currentTime = f.time();
+	unsigned frameTime = (currentTime - gState->mPrevTime);
+	unsigned frameRate = 1000 / frameTime;
+	if (gCount % 60 == 0) cout << "frameRate :: " << frameRate << " (fps)" << endl;
+	gCount++;
+	//while (f.time() < gState->mPrevTime + 16) f.sleep(1); // 固定フレームレート frameRateの調整 62.5fps
+	gState->mPrevTime = currentTime;
+
+	if(gState->clearCheck()) {
+	  cleared = true;
+	}
+
+	gState->update(frameTime);
+  gState->drawStage();
+
+	//ステージクリアーかチェック
+	if (cleared) {
+		cout << "Congratulation!!!" << endl;
+		delete gState;
+		gState = 0;
+	};
+
+	//終了
 	if (f.isKeyOn('q')) {
 		f.requestEnd();
 	}
-
-	gState->update();
-	gState->drawStage();
-
-	//ステージクリアーかチェック
-	if (gState->clearCheck()) {
-	  cout << "Congratulation!!!" << endl;
-		delete gState;
-		gState = 0;
-		return;
-	};
 
 }
 

@@ -13,7 +13,7 @@ Image::Image(const char* filename) {
 	mHeight = file.getUnsigned(12);
 	mWidth = file.getUnsigned(16);
 	unsigned* img = new unsigned[mWidth * mHeight];
-	for (unsigned i = 0; i < mWidth * mHeight; i++) img[i] = file.getUnsigned(128 + i * 4);
+	for (int i = 0; i < mWidth * mHeight; i++) img[i] = file.getUnsigned(128 + i * 4);
 	mData = img;
 };
 
@@ -35,7 +35,8 @@ void Image::drawPicture(
 	for (int y = 0; y < height; y++) {
 		for (int x = 0; x < width; x++) {
 			//画面範囲チェック
-			if ((y + dstY) * windowWidth + (x + dstX) > windowHeight * windowWidth) break;
+			if ((y + dstY) * windowWidth + (x + dstX) >= windowHeight * windowWidth) break;
+
 			unsigned src = mData[(y + srcY) * mWidth + (x + srcX)];
 			unsigned* dst = &vram[(y + dstY) * windowWidth + (x + dstX)];
 			unsigned srcA = (src & 0xff000000) >> 24;

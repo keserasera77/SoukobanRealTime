@@ -6,53 +6,125 @@
 
 using namespace GameLib;
 
+const int CELL_EDGE = 32;
+const int MAX_MOVE_COUNT = 250;
+
+class State::Object {
+public:
+	enum Type {
+		OBJ_SPACE,
+		OBJ_WALL,
+		OBJ_GOAL,
+		OBJ_BLOCK,
+		OBJ_MAN,
+
+		OBJ_UNKNOWN,
+	};
+	enum ImageID {
+		IMAGE_ID_PLAYER,
+		IMAGE_ID_WALL,
+		IMAGE_ID_BLOCK,
+		IMAGE_ID_GOAL,
+		IMAGE_ID_SPACE,
+	};
+
+	Object() : mType(OBJ_WALL), mGoalFlag(false), mMoveX(0), mMoveY(0) {};
+	//~Object();
+
+	Type mType;
+	bool mGoalFlag;
+	int mMoveX; //-1,0,1
+	int mMoveY; //-1,0,1
+
+	void set(char input) {
+			switch (input) {
+			case '#': mType = OBJ_WALL; break;
+			case ' ': mType = OBJ_SPACE; break;
+			case 'o': mType = OBJ_BLOCK; break;
+			case 'O': mType = OBJ_BLOCK; mGoalFlag = true; break;
+			case '.': mType = OBJ_SPACE; mGoalFlag = true; break;
+			case 'p': mType = OBJ_MAN; break;
+			case 'P': mType = OBJ_MAN; mGoalFlag = true; break;
+			case '\n': mType = OBJ_UNKNOWN; break; 
+			default: mType = OBJ_UNKNOWN; break;
+			}
+	}
+
+	//描画。背景描画
+	void drawBackground(int x, int y, const Image* image) const {
+		ImageID id = IMAGE_ID_SPACE;
+		//壁なら壁
+		if (mType == OBJ_WALL) {
+			drawCell(x, y, IMAGE_ID_WALL, image);
+		}
+		else {
+			if (mGoalFlag) {
+				drawCell(x, y, IMAGE_ID_GOAL, image);
+			}
+			else {
+				drawCell(x, y, IMAGE_ID_SPACE, image);
+			}
+		}
+	}
+	void drawForeground(int x, int y, const Image* image, int moveCount) const {
+		//動くのは人と荷物だけ。
+		ImageID id = IMAGE_ID_SPACE; //前景がないフラグとして使う
+		if (mType == OBJ_BLOCK) {
+			id = IMAGE_ID_BLOCK;
+		}
+		else if (mType == OBJ_MAN) {
+			id = IMAGE_ID_PLAYER;
+		}
+		if (id != IMAGE_ID_SPACE) { //背景以外なら
+			//移動を計算
+			const int m =  MAX_MOVE_COUNT;
+			int dx = (mMoveX * (m - moveCount) * CELL_EDGE) / m;
+			int dy = (mMoveY * (m - moveCount) * CELL_EDGE) / m;
+			image->drawPicture(x * CELL_EDGE - dx, y * CELL_EDGE - dy, id * CELL_EDGE, 0, CELL_EDGE, CELL_EDGE);
+		}
+	}
+
+	void drawCell(int x, int y, ImageID imageID, const Image* image) const {
+		image->drawPicture(CELL_EDGE * x, CELL_EDGE * y, imageID * CELL_EDGE, 0, CELL_EDGE, CELL_EDGE);
+	};
+
+	//移動をセット。第3引数は置き換わるタイプ
+	void move(int dx, int dy, Type replaced) {
+		mMoveX = dx;
+		mMoveY = dy;
+		mType = replaced;
+	}
+
+};
+
 State::State(const char* stageData, int stageSize) {
 
 	setSize(stageData, stageSize);
 	mObjects.setSize(mStageWidth, mStageHeight);
-	mGoalFlags.setSize(mStageWidth, mStageHeight);
 
-	//画像の読み込み
-	mImg = new Image("Images.dds");
-
-
-	//mObjects,mGoalFlagsの初期化 いるの？？
-	for (int y = 0; y < mStageHeight; ++y) {
-		for (int x = 0; x < mStageWidth; ++x) {
-			mObjects(x, y) = OBJ_WALL;
-			mGoalFlags(x, y) = false;
-		}
-	}
-
-	int x = 0;
-	int y = 0;
-	for (int i = 0; i < stageSize; i++) {
+	int x=0, y=0;
+	for (int i = 0; i < stageSize; ++i) {
 		Object t;
 		bool goalFlag = false;
 		switch (stageData[i]) {
-		case '#': t = OBJ_WALL; break;
-		case ' ': t = OBJ_SPACE; break;
-		case 'o': t = OBJ_BLOCK; break;
-		case 'O': t = OBJ_BLOCK; goalFlag = true; break;
-		case '.': t = OBJ_SPACE; goalFlag = true; break;
-		case 'p': t = OBJ_MAN; break;
-		case 'P': t = OBJ_MAN; goalFlag = true; break;
-		case '\n': x = 0; ++y; t = OBJ_UNKNOWN; break; //���s����
-		default: t = OBJ_UNKNOWN; break;
-		}
-
-		if (t == OBJ_MAN) {
-			mPx = x;
-			mPy = y;
-		}
-
-		if (t != OBJ_UNKNOWN) {
-			mObjects(x, y) = t;
-			mGoalFlags(x, y) = goalFlag;
-			x++;
+		case '#': case ' ': case 'o': case 'O': case '.':
+			mObjects(x, y).set(stageData[i]);
+			++x;
+			break;
+		case 'p': case 'P':
+		  mPx = x; mPy = y; //人の位置の記憶
+			mObjects(x, y).set(stageData[i]);
+			++x;
+			break;
+		case '\n': x = 0; ++y; break; //改行処理
 		}
 	}
+
+	//画像の読み込み
+	mImg = new Image("Images.dds");
 }
+
+
 
 void State::setSize(const char* stage, int size) {
 	int x = 0;
@@ -76,77 +148,79 @@ void State::setSize(const char* stage, int size) {
 bool State::clearCheck() const {
 	for (int y = 0; y < mStageHeight; y++) {
 		for (int x = 0; x < mStageWidth; x++) {
-			if (mObjects(x, y) == OBJ_BLOCK && mGoalFlags(x, y) == false) return false;
+			if (mObjects(x, y).mType == Object::OBJ_BLOCK && mObjects(x, y).mGoalFlag == false) return false;
 		}
 	}
 	return true;
 }
 
-
-void State::drawCell(int x, int y, ImageID imageID) const {
-	mImg->drawPicture(mCellWidth * x, mCellHeight * y, imageID * mCellWidth, 0, mCellWidth, mCellHeight);
-}
-
 void State::drawStage() const {
-	for (int y = 0; y < mStageHeight; y++) {
-		for (int x = 0; x < mStageWidth; x++) {
-			bool goalFlag = mGoalFlags(x, y);
-			switch (mObjects(x, y)) {
-			case OBJ_WALL: drawCell(x, y, IMAGE_ID_WALL); break;
-			case OBJ_SPACE:
-				if (goalFlag == true)  drawCell(x, y, IMAGE_ID_GOAL);
-				else drawCell(x, y, IMAGE_ID_SPACE);
-				break;
-			case OBJ_BLOCK:
-				if (goalFlag == true) { drawCell(x, y, IMAGE_ID_GOAL); drawCell(x, y, IMAGE_ID_BLOCK); }
-				else { drawCell(x, y, IMAGE_ID_SPACE); drawCell(x, y, IMAGE_ID_BLOCK);}
-				break;
-			case OBJ_MAN:
-				if (goalFlag == true) { drawCell(x, y, IMAGE_ID_GOAL); drawCell(x, y, IMAGE_ID_PLAYER); }
-				else { drawCell(x, y, IMAGE_ID_SPACE); drawCell(x, y, IMAGE_ID_PLAYER);}
-				break;
-			case OBJ_UNKNOWN: break;
-			default: break;
-			}
+	//二段階に分けて描画する。まず背景を描画。
+	for (int y = 0; y < mStageHeight; ++y) {
+		for (int x = 0; x < mStageWidth; ++x) {
+			mObjects(x, y).drawBackground(x, y, mImg);
+			//			mObjects( x, y ).drawForeground( x, y, mImage, mMoveCount ); //ここを復活させて、下のループを消すと、人が裂ける絵が出る。
+		}
+	}
+	//次に前景を描画
+	for (int y = 0; y < mStageHeight; ++y) {
+		for (int x = 0; x < mStageWidth; ++x) {
+			mObjects(x, y).drawForeground(x, y, mImg, mMoveCount);
 		}
 	}
 }
 
-void State::update() {
+void State::update(unsigned frameTime) {
 	Framework f = Framework::instance();
 	int dPx = 0, dPy = 0;
 
+	if (mMoveCount >= MAX_MOVE_COUNT) {
+	mMoveCount = 0;
+		for (int y = 0; y < mStageHeight; y++) {
+			for (int x = 0; x < mStageWidth; x++) {
+				mObjects(x, y).mMoveX = 0; 
+				mObjects(x, y).mMoveY = 0;
+			}
+		}
+	}
+	else if (mMoveCount > 0) { //移動中はステージの更新しない
+		mMoveCount += frameTime; 
+		if (mMoveCount > MAX_MOVE_COUNT) mMoveCount = MAX_MOVE_COUNT;
+		return;
+	}
+	
 	//入力が何もない場合のmPreviousKeyのリセット
-	if (!f.isKeyOn('a') && !f.isKeyOn('s') && !f.isKeyOn('d') && !f.isKeyOn('w')) mPreviousKey = '_';//どれでもない何か
+	if (!f.isKeyOn('a') && !f.isKeyOn('s') && !f.isKeyOn('d') && !f.isKeyOn('w')) mPrevKey = '_';//どれでもない何か
 
-	if (f.isKeyOn('a') && mPreviousKey != 'a') {dPx = -1; mPreviousKey = 'a';}
-	else if (f.isKeyOn('s') && mPreviousKey != 's') {dPy = 1; mPreviousKey = 's';}
-	else if (f.isKeyOn('d') && mPreviousKey != 'd') {dPx = 1; mPreviousKey = 'd'; }
-	else if (f.isKeyOn('w') && mPreviousKey != 'w') {dPy = -1; mPreviousKey = 'w'; };
+	if (f.isKeyOn('a') && mPrevKey != 'a') { dPx = -1; mPrevKey = 'a'; }
+	else if (f.isKeyOn('s') && mPrevKey != 's') { dPy = 1; mPrevKey = 's'; }
+	else if (f.isKeyOn('d') && mPrevKey != 'd') { dPx = 1; mPrevKey = 'd'; }
+	else if (f.isKeyOn('w') && mPrevKey != 'w') { dPy = -1; mPrevKey = 'w'; }
 
+//範囲チェック
+if (mPx + dPx < 0 || mStageWidth <= mPx + dPx || mPy + dPy < 0 || mStageWidth <= mPy + dPy) return;
+
+switch (mObjects(mPx + dPx, mPy + dPy).mType) {
+case Object::OBJ_SPACE:
+	mObjects(mPx + dPx, mPy + dPy).move(dPx, dPy, Object::OBJ_MAN);
+	mObjects(mPx, mPy).move(dPx, dPy, Object::OBJ_SPACE);
+	mPx += dPx; mPy += dPy;
+	mMoveCount = 1; //人が動き始める
+	break;
+case Object::OBJ_BLOCK:
 
 	//範囲チェック
-	if (mPx + dPx < 0 || mStageWidth <= mPx + dPx || mPy + dPy < 0 || mStageWidth <= mPy + dPy) return;
-	switch (mObjects(mPx + dPx, mPy + dPy)) {
-	case OBJ_SPACE:
-		mObjects(mPx + dPx, mPy + dPy) = OBJ_MAN;
-		mObjects(mPx, mPy) = OBJ_SPACE;
+	if (mPx + 2 * dPx < 0 || mStageWidth <= mPx + 2 * dPx || mPy + 2 * dPy < 0 || mStageWidth <= mPy + 2 * dPy) return;
+
+	switch (mObjects(mPx + 2 * dPx, mPy + 2 * dPy).mType) {
+		//OBJ_BLOCK,OBJ_WALLの場合はその場に残る
+	case Object::OBJ_SPACE:
+		mObjects(mPx + 2 * dPx, mPy + 2 * dPy).move(dPx, dPy, Object::OBJ_BLOCK);
+		mObjects(mPx + dPx, mPy + dPy).move(dPx, dPy, Object::OBJ_MAN);
+		mObjects(mPx, mPy).move(dPx, dPy, Object::OBJ_SPACE);
 		mPx += dPx; mPy += dPy;
-		break;
-	case OBJ_BLOCK:
-		//範囲チェック
-		if (mPx + 2 * dPx < 0 || mStageWidth <= mPx + 2 * dPx || mPy + 2 * dPy < 0 || mStageWidth <= mPy + 2 * dPy) {
-			return;
-		}
-		switch (mObjects(mPx + 2 * dPx, mPy + 2 * dPy)) {
-			//'#','o','O'の場合はその場に残る
-		case OBJ_SPACE:
-			mObjects(mPx + 2 * dPx, mPy + 2 * dPy) = OBJ_BLOCK;
-			mObjects(mPx + dPx, mPy + dPy) = OBJ_MAN;
-			mObjects(mPx, mPy) = OBJ_SPACE;
-			mPx += dPx; mPy += dPy;
-			break;
-		}
+		mMoveCount = 1; //人が動いているという情報。移動描写時に使う。
 		break;
 	}
+}
 }
